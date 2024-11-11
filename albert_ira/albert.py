@@ -14,7 +14,7 @@ import os
 from groq import Groq
 import math
 
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Ensure CUDA launches are synchronous for debugging
 
 # Constants
 MODEL_NAME = "albert-base-v2"
@@ -27,10 +27,9 @@ albert_model = AutoModel.from_pretrained(MODEL_NAME).to(device)
 # Initialize Groq client
 client = Groq(api_key="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")
 
-
-# Define a regression model for predicting scores
 class RegressionModel(nn.Module):
     """A simple feedforward neural network for regression, with dropout for regularization."""
+    
     def __init__(self, input_shape):
         super(RegressionModel, self).__init__()
         self.fc1 = nn.Linear(input_shape, 256)
@@ -49,7 +48,10 @@ class RegressionModel(nn.Module):
         return x
         
 class MultiTaskModel(nn.Module):
-    """A multitask model for predicting both regression (score) and classification (quality)."""
+    """
+    A multitask model for predicting both regression (score) and classification (quality).
+    This model can also predict other attributes relevant to essay quality.
+    """
     def __init__(self, input_shape):
         super(MultiTaskModel, self).__init__()
         # Shared layers
@@ -60,10 +62,12 @@ class MultiTaskModel(nn.Module):
         self.bn2 = nn.BatchNorm1d(128)
         self.dropout2 = nn.Dropout(0.5)
         
+        # Heads for different tasks
         self.regression_head = nn.Linear(128, 1)
         self.classification_head = nn.Linear(128, 3)  # 3 classes: low, medium, high
         self.essay_type_head = nn.Linear(128, 3)  # 3 types: argumentative, dependent, narrative
 
+        # Learnable task uncertainty parameters
         self.task_uncertainty = nn.Parameter(torch.tensor([0.0, 0.0]), requires_grad=True)
 
         # Additional regression heads for other attributes (score between 0-10)
@@ -79,11 +83,13 @@ class MultiTaskModel(nn.Module):
         self.voice_head = nn.Linear(128, 1)  # Voice
      
     def forward(self, x):
+        """Forward pass for multitask prediction."""
         x = torch.relu(self.bn1(self.fc1(x)))
         x = self.dropout1(x)
         x = torch.relu(self.bn2(self.fc2(x)))
         x = self.dropout2(x)
         
+        # Outputs for each task
         score_output = self.regression_head(x)
         quality_output = self.classification_head(x)
         essay_type_output = self.essay_type_head(x)
@@ -106,11 +112,21 @@ class MultiTaskModel(nn.Module):
                 prompt_adherence_output, narrativity_output, style_output, voice_output)
 
     def compute_uncertainty_loss(self, loss_score, loss_quality):
+        """
+        Compute the total loss with task uncertainty weighting.
+        
+        Args:
+            loss_score: Loss for the regression task (score prediction).
+            loss_quality: Loss for the classification task (quality prediction).
+            
+        Returns:
+            Weighted total loss based on task uncertainties.
+        """
         precision1 = torch.exp(-self.task_uncertainty[0])
         precision2 = torch.exp(-self.task_uncertainty[1])
         
         loss = (precision1 * loss_score + self.task_uncertainty[0]) + \
-               (precision2 * loss_quality + self.task_uncertainty[1])
+            (precision2 * loss_quality + self.task_uncertainty[1])
         
         return loss
         
@@ -122,7 +138,16 @@ class MultiTaskModel(nn.Module):
                      y_content, y_organization, y_word_choice,
                      y_sentence_fluency, y_conventions, y_language,
                      y_prompt_adherence, y_narrativity, y_style, y_voice):
+        """
+        Calculate the combined loss for all tasks in the multitask model.
         
+        Args:
+            Predictions and ground truth values for the main score and various quality attributes.
+            
+        Returns:
+            Total loss calculated as a combination of regression and classification losses.
+        """
+
         mse_loss = nn.MSELoss()(pred_score, y_score)
         cross_entropy_loss_quality = nn.CrossEntropyLoss()(pred_quality, y_quality)
         cross_entropy_loss_essay_type = nn.CrossEntropyLoss()(pred_essay_type, y_essay_type)
@@ -139,7 +164,7 @@ class MultiTaskModel(nn.Module):
         mse_loss_style = nn.MSELoss()(pred_style, y_style)
         mse_loss_voice = nn.MSELoss()(pred_voice, y_voice)
 
-        # Combine all the losses
+        # Sum all the losses for total loss
         total_loss = mse_loss + cross_entropy_loss_quality + cross_entropy_loss_essay_type + \
                      mse_loss_content + mse_loss_organization + mse_loss_word_choice + \
                      mse_loss_sentence_fluency + mse_loss_conventions + mse_loss_language + \
@@ -147,13 +172,15 @@ class MultiTaskModel(nn.Module):
         
         return total_loss
 
-
 class LabelSmoothingCrossEntropy(nn.Module):
+    """Cross-entropy loss with label smoothing for regularization."""
+    
     def __init__(self, smoothing=0.1):
         super(LabelSmoothingCrossEntropy, self).__init__()
         self.smoothing = smoothing
 
     def forward(self, pred, target):
+        """Forward pass with label smoothing."""
         log_probs = F.log_softmax(pred, dim=-1)
         nll_loss = -log_probs.gather(dim=-1, index=target.unsqueeze(1))
         nll_loss = nll_loss.squeeze(1)
@@ -161,7 +188,7 @@ class LabelSmoothingCrossEntropy(nn.Module):
         return (1 - self.smoothing) * nll_loss + self.smoothing * smooth_loss
 
 def load_glove_model(glove_file_path):
-    """Load GloVe embeddings from file into a dictionary."""
+    """Load GloVe embeddings from a file into a dictionary."""
     embedding_dict = {}
     with open(glove_file_path, 'r', encoding="utf-8") as f:
         for line in f:
@@ -172,25 +199,45 @@ def load_glove_model(glove_file_path):
     return embedding_dict
 
 def load_fasttext_model(fasttext_file_path):
-    """Load FastText embeddings from file into a dictionary."""
+    """Load FastText embeddings from a file into a dictionary."""
     model = KeyedVectors.load_word2vec_format(fasttext_file_path, binary=False)
     return {word: torch.tensor(model[word]).to(device) for word in model.index_to_key}
 
 def get_albert_embedding(text):
+    """Generate ALBERT embeddings for the input text."""
     inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True, max_length=256).to(device)
     with torch.no_grad():
         outputs = albert_model(**inputs)
     return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
 def get_word_embedding(text, embedding_dict):
+    """
+    Generate a word embedding by averaging embeddings of individual words in the text.
+    
+    Args:
+        text: Input text.
+        embedding_dict: Preloaded word embeddings (e.g., GloVe or FastText).
+        
+    Returns:
+        Averaged word embedding vector.
+    """
     words = text.lower().split()
     vectors = [embedding_dict[word] for word in words if word in embedding_dict]
     if vectors:
         return torch.mean(torch.stack(vectors), dim=0).cpu().numpy()
-    return np.zeros(300)
+    return np.zeros(300)  # Return zero vector if no words match
 
-# Create attention-based embedding fusion
 def create_attention_based_embedding(albert_emb, additional_emb):
+    """
+    Fuse ALBERT embedding with additional word embedding using attention-based fusion.
+    
+    Args:
+        albert_emb: ALBERT embedding vector.
+        additional_emb: Additional word embedding vector.
+        
+    Returns:
+        Fused embedding vector.
+    """
     if albert_emb.shape != additional_emb.shape:
         additional_emb = torch.nn.Linear(additional_emb.shape[0], albert_emb.shape[0]).to(albert_emb.device)(additional_emb)
     combined_emb = torch.cat([albert_emb.unsqueeze(0), additional_emb.unsqueeze(0)], dim=0)
@@ -200,6 +247,19 @@ def create_attention_based_embedding(albert_emb, additional_emb):
     return fused_embedding
 
 def create_combined_embedding(text, embedding_type=None, _glove_model=None, _fasttext_model=None):
+    """
+    Create a combined embedding for a given text, optionally incorporating additional embeddings.
+
+    Args:
+        text: Input text for which to create the embedding.
+        embedding_type: Type of additional embedding to use ("glove" or "fasttext").
+        _glove_model: Preloaded GloVe embeddings, if using GloVe.
+        _fasttext_model: Preloaded FastText embeddings, if using FastText.
+
+    Returns:
+        A tuple containing the combined embedding and its size.
+    """
+
     albert_emb = get_albert_embedding(text).flatten()
 
     if embedding_type == "glove":
@@ -228,6 +288,24 @@ def create_combined_embedding(text, embedding_type=None, _glove_model=None, _fas
     return combined_emb.cpu().numpy(), combined_emb.size(0)
 
 def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor, y_train_essay_type_tensor, input_shape, save_dir, epochs=10, batch_size=8, learning_rate=1e-4):
+    """
+    Train the MultiTaskModel on the training dataset and save the trained model.
+
+    Args:
+        X_train_tensor: Training features as PyTorch tensors.
+        y_train_tensor: Ground truth scores for regression.
+        y_train_quality_tensor: Ground truth labels for quality classification.
+        y_train_essay_type_tensor: Ground truth labels for essay type classification.
+        input_shape: Shape of the input features.
+        save_dir: Directory to save the trained model.
+        epochs: Number of training epochs.
+        batch_size: Batch size for training.
+        learning_rate: Learning rate for optimizer.
+
+    Returns:
+        Path to the saved model file.
+    """
+
     model = MultiTaskModel(input_shape).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
     train_loader = DataLoader(TensorDataset(X_train_tensor, y_train_tensor, y_train_quality_tensor, y_train_essay_type_tensor, y_train_content_tensor, 
@@ -304,6 +382,18 @@ def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_ess
                    y_test_content, y_test_organization, y_test_word_choice, y_test_sentence_fluency,
                    y_test_conventions, y_test_language, y_test_prompt_adherence, y_test_narrativity,
                    y_test_style, y_test_voice, save_dir):
+    """
+    Evaluate the trained model on the test set and print various metrics.
+
+    Args:
+        model_path: Path to the saved model file.
+        X_test_tensor: Test features as PyTorch tensors.
+        y_test: Ground truth scores for regression.
+        y_test_quality: Ground truth labels for quality classification.
+        y_test_essay_type: Ground truth labels for essay type classification.
+        save_dir: Directory to save results (if needed).
+    """
+
     model = MultiTaskModel(X_test_tensor.shape[1]).to(device)  # Move model to device
     model.load_state_dict(torch.load(model_path))
     model.eval()
@@ -386,6 +476,29 @@ def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_ess
            mse_prompt_adherence, mse_narrativity, mse_style, mse_voice
 
 def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, fasttext_model=None, min_score=0, max_score=100, attribute_ranges=None):
+    """
+    Generate predictions for a given essay content using the specified model and embeddings.
+
+    Args:
+        content (str): The text of the essay to evaluate.
+        embedding_type (str, optional): The type of additional embedding to use ("glove" or "fasttext").
+        SAVE_DIR (str, optional): Directory where model files are stored.
+        glove_model (dict, optional): Preloaded GloVe embeddings if using GloVe.
+        fasttext_model (dict, optional): Preloaded FastText embeddings if using FastText.
+        min_score (int, optional): Minimum score range for normalizing the predicted score.
+        max_score (int, optional): Maximum score range for normalizing the predicted score.
+        attribute_ranges (dict, optional): Dictionary containing min and max ranges for each attribute in the dataset.
+
+    Returns:
+        tuple: A tuple containing:
+            - formatted_score (float): The normalized and formatted score between 0 and 100.
+            - quality_label (str): The quality level ("Low", "Medium", or "High").
+            - essay_type (str): The type of essay ("Argumentative", "Dependent", or "Narrative").
+            - content_score, organization_score, word_choice_score, sentence_fluency_score, conventions_score,
+              language_score, prompt_adherence_score, narrativity_score, style_score, voice_score (int):
+              Normalized scores for each of these specific attributes.
+    """
+    
     if attribute_ranges is None:
         raise ValueError("attribute_ranges must be provided.")
     
@@ -468,6 +581,18 @@ def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, f
            style_score, voice_score
 
 def generate_feedback(content, score, quality_level):
+    """
+    Generate feedback based on essay content, score, and quality level.
+
+    Args:
+        content: Essay content.
+        score: Predicted score.
+        quality_level: Predicted quality level.
+
+    Returns:
+        Generated feedback text.
+    """
+
     quality_text = {0: "low", 1: "medium", 2: "high"}.get(quality_level, "unknown")
     
     # Construct the prompt to ensure structured and concise feedback
@@ -503,13 +628,13 @@ def generate_feedback(content, score, quality_level):
         return f"Error generating feedback: {e}"
 
 def get_attribute_range(df, attribute_name):
-    """Get the min and max range for a given attribute."""
+    """Get min and max range for a given attribute in the dataset."""
     min_val = df[attribute_name].min()
     max_val = df[attribute_name].max()
     return min_val, max_val
 
 def normalize_and_round_up(attribute_value, min_value, max_value):
-    """Normalize the attribute value to the specified range [min_value, max_value] and round it up."""
+    """Normalize and round up the attribute value to the specified range."""
     # Check for NaN and replace with 0
     if np.isnan(attribute_value):
         attribute_value = 0
@@ -528,7 +653,13 @@ def normalize_and_round_up(attribute_value, min_value, max_value):
     return math.ceil(scaled_value)
 
 def display_selected_attributes(essay_type, attributes):
-    """Display only the attributes relevant to the specified essay type."""
+    """
+    Display only relevant attributes based on the essay type.
+
+    Args:
+        essay_type: Type of essay (e.g., Argumentative, Dependent, Narrative).
+        attributes: Dictionary of attribute scores.
+    """    
     # Define the attribute mappings for each essay type
     attribute_mapping = {
         "Argumentative": ['content', 'organization', 'word_choice', 'sentence_fluency', 'conventions'],

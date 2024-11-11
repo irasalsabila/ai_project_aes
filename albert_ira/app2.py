@@ -1,3 +1,6 @@
+# This script implements a Streamlit app for essay scoring using multi-model embeddings.
+# The app allows users to input their essays, select embedding types, and evaluate the text for various scoring attributes.
+
 import streamlit as st
 import torch
 import numpy as np
@@ -99,7 +102,7 @@ st.write(f"Char: {char_count} | Word: {word_count}")
 
 # Embedding options
 embedding_options = {
-    "ALBERT only": None,
+    "ALBERT": None,
     "ALBERT + GloVe": "glove",
     "ALBERT + FastText": "fasttext"
 }
@@ -118,7 +121,7 @@ if st.button("Evaluate"):
                 fasttext_model=fasttext_model,
                 attribute_ranges=attribute_ranges
             )
-        embedding_name = "ALBERT only" if embedding_type is None else f"ALBERT + {embedding_type.capitalize()}"
+        embedding_name = "ALBERT" if embedding_type is None else f"ALBERT + {embedding_type.capitalize()}"
         results[embedding_name] = {
             "score": score,
             "quality": quality_label,
