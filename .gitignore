@@ -1,3 +1,13 @@
 dataset/
 word_embeddings/
 # result/
+albert_ira/__pychace__/
+
+app.py
+code.ipynb
+code1.ipynb
+code2.ipynb
+distril.py
+slm.py
+
+code4_albert.ipynb
