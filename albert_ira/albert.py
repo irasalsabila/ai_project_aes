@@ -8,11 +8,15 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from gensim.models import KeyedVectors
 from sklearn.metrics import f1_score, accuracy_score, mean_squared_error, cohen_kappa_score
+from sklearn.preprocessing import KBinsDiscretizer
 import torch.nn.functional as F
 import requests
 import os
 from groq import Groq
 import math
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Ensure CUDA launches are synchronous for debugging
 
@@ -65,7 +69,7 @@ class MultiTaskModel(nn.Module):
         # Heads for different tasks
         self.regression_head = nn.Linear(128, 1)
         self.classification_head = nn.Linear(128, 3)  # 3 classes: low, medium, high
-        self.essay_type_head = nn.Linear(128, 3)  # 3 types: argumentative, dependent, narrative
+        self.essay_type_head = nn.Linear(128, 2)  # 3 types: argumentative, dependent, narrative
 
         # Learnable task uncertainty parameters
         self.task_uncertainty = nn.Parameter(torch.tensor([0.0, 0.0]), requires_grad=True)
@@ -76,11 +80,11 @@ class MultiTaskModel(nn.Module):
         self.word_choice_head = nn.Linear(128, 1)  # Word Choice
         self.sentence_fluency_head = nn.Linear(128, 1)  # Sentence Fluency
         self.conventions_head = nn.Linear(128, 1)  # Conventions
-        self.language_head = nn.Linear(128, 1)  # Language
-        self.prompt_adherence_head = nn.Linear(128, 1)  # Prompt Adherence
-        self.narrativity_head = nn.Linear(128, 1)  # Narrativity
-        self.style_head = nn.Linear(128, 1)  # Style
-        self.voice_head = nn.Linear(128, 1)  # Voice
+        # self.language_head = nn.Linear(128, 1)  # Language
+        # self.prompt_adherence_head = nn.Linear(128, 1)  # Prompt Adherence
+        # self.narrativity_head = nn.Linear(128, 1)  # Narrativity
+        # self.style_head = nn.Linear(128, 1)  # Style
+        # self.voice_head = nn.Linear(128, 1)  # Voice
      
     def forward(self, x):
         """Forward pass for multitask prediction."""
@@ -100,16 +104,16 @@ class MultiTaskModel(nn.Module):
         word_choice_output = self.word_choice_head(x)
         sentence_fluency_output = self.sentence_fluency_head(x)
         conventions_output = self.conventions_head(x)
-        language_output = self.language_head(x)
-        prompt_adherence_output = self.prompt_adherence_head(x)
-        narrativity_output = self.narrativity_head(x)
-        style_output = self.style_head(x)
-        voice_output = self.voice_head(x)
+        # language_output = self.language_head(x)
+        # prompt_adherence_output = self.prompt_adherence_head(x)
+        # narrativity_output = self.narrativity_head(x)
+        # style_output = self.style_head(x)
+        # voice_output = self.voice_head(x)
 
         return (score_output, quality_output, essay_type_output,
                 content_output, organization_output, word_choice_output,
-                sentence_fluency_output, conventions_output, language_output,
-                prompt_adherence_output, narrativity_output, style_output, voice_output)
+                sentence_fluency_output, conventions_output)
+                # language_output, prompt_adherence_output, narrativity_output, style_output, voice_output)
 
     def compute_uncertainty_loss(self, loss_score, loss_quality):
         """
@@ -132,12 +136,10 @@ class MultiTaskModel(nn.Module):
         
     def compute_loss(self, pred_score, pred_quality, pred_essay_type,
                      pred_content, pred_organization, pred_word_choice,
-                     pred_sentence_fluency, pred_conventions, pred_language,
-                     pred_prompt_adherence, pred_narrativity, pred_style, pred_voice,
+                     pred_sentence_fluency, pred_conventions,
                      y_score, y_quality, y_essay_type,
                      y_content, y_organization, y_word_choice,
-                     y_sentence_fluency, y_conventions, y_language,
-                     y_prompt_adherence, y_narrativity, y_style, y_voice):
+                     y_sentence_fluency, y_conventions):
         """
         Calculate the combined loss for all tasks in the multitask model.
         
@@ -158,17 +160,16 @@ class MultiTaskModel(nn.Module):
         mse_loss_word_choice = nn.MSELoss()(pred_word_choice, y_word_choice)
         mse_loss_sentence_fluency = nn.MSELoss()(pred_sentence_fluency, y_sentence_fluency)
         mse_loss_conventions = nn.MSELoss()(pred_conventions, y_conventions)
-        mse_loss_language = nn.MSELoss()(pred_language, y_language)
-        mse_loss_prompt_adherence = nn.MSELoss()(pred_prompt_adherence, y_prompt_adherence)
-        mse_loss_narrativity = nn.MSELoss()(pred_narrativity, y_narrativity)
-        mse_loss_style = nn.MSELoss()(pred_style, y_style)
-        mse_loss_voice = nn.MSELoss()(pred_voice, y_voice)
+        # mse_loss_language = nn.MSELoss()(pred_language, y_language)
+        # mse_loss_prompt_adherence = nn.MSELoss()(pred_prompt_adherence, y_prompt_adherence)
+        # mse_loss_narrativity = nn.MSELoss()(pred_narrativity, y_narrativity)
+        # mse_loss_style = nn.MSELoss()(pred_style, y_style)
+        # mse_loss_voice = nn.MSELoss()(pred_voice, y_voice)
 
         # Sum all the losses for total loss
         total_loss = mse_loss + cross_entropy_loss_quality + cross_entropy_loss_essay_type + \
                      mse_loss_content + mse_loss_organization + mse_loss_word_choice + \
-                     mse_loss_sentence_fluency + mse_loss_conventions + mse_loss_language + \
-                     mse_loss_prompt_adherence + mse_loss_narrativity + mse_loss_style + mse_loss_voice
+                     mse_loss_sentence_fluency + mse_loss_conventions
         
         return total_loss
 
@@ -287,31 +288,68 @@ def create_combined_embedding(text, embedding_type=None, _glove_model=None, _fas
 
     return combined_emb.cpu().numpy(), combined_emb.size(0)
 
-def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor, y_train_essay_type_tensor, input_shape, save_dir, epochs=10, batch_size=8, learning_rate=1e-4):
-    """
-    Train the MultiTaskModel on the training dataset and save the trained model.
+def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor, y_train_essay_type_tensor, 
+                         y_train_content_tensor, y_train_organization_tensor, y_train_word_choice_tensor, 
+                         y_train_sentence_fluency_tensor, y_train_conventions_tensor, 
+                         input_shape, save_dir, epochs=10, batch_size=8, learning_rate=1e-4):
 
-    Args:
-        X_train_tensor: Training features as PyTorch tensors.
-        y_train_tensor: Ground truth scores for regression.
-        y_train_quality_tensor: Ground truth labels for quality classification.
-        y_train_essay_type_tensor: Ground truth labels for essay type classification.
-        input_shape: Shape of the input features.
-        save_dir: Directory to save the trained model.
-        epochs: Number of training epochs.
-        batch_size: Batch size for training.
-        learning_rate: Learning rate for optimizer.
+    """
+    Train a multitask model on essay data for regression and classification tasks, and save the trained model.
+
+    This function trains a multitask neural network on a dataset of essay features, where the model predicts an 
+    overall essay score (regression), quality category, essay type, and several attribute scores such as content, 
+    organization, word choice, sentence fluency, and conventions. The function uses label smoothing for classification
+    tasks to reduce overfitting, and task uncertainty weighting for loss balancing between different tasks.
+
+    Parameters:
+    ----------
+    X_train_tensor : torch.Tensor
+        The training input features as a PyTorch tensor.
+    y_train_tensor : torch.Tensor
+        Ground truth scores for the primary regression task.
+    y_train_quality_tensor : torch.Tensor
+        Ground truth labels for quality classification.
+    y_train_essay_type_tensor : torch.Tensor
+        Ground truth labels for essay type classification.
+    y_train_content_tensor : torch.Tensor
+        Ground truth labels for the content attribute.
+    y_train_organization_tensor : torch.Tensor
+        Ground truth labels for the organization attribute.
+    y_train_word_choice_tensor : torch.Tensor
+        Ground truth labels for the word choice attribute.
+    y_train_sentence_fluency_tensor : torch.Tensor
+        Ground truth labels for the sentence fluency attribute.
+    y_train_conventions_tensor : torch.Tensor
+        Ground truth labels for the conventions attribute.
+    input_shape : int
+        The shape (number of features) of the input to the model.
+    save_dir : str
+        The directory to save the trained model and embedding size file.
+    epochs : int, optional, default=10
+        The number of epochs to train the model.
+    batch_size : int, optional, default=8
+        The number of samples per batch for training.
+    learning_rate : float, optional, default=1e-4
+        The learning rate for the optimizer.
 
     Returns:
-        Path to the saved model file.
+    -------
+    str
+        The file path of the saved model.
+    
+    Notes:
+    ------
+    - This function computes a combined loss across multiple tasks, including regression for score prediction,
+      classification for quality and essay type, and additional regression tasks for specific attributes.
+    - The model is saved at the end of training along with the embedding size to facilitate consistent embedding 
+      processing during inference.
     """
 
     model = MultiTaskModel(input_shape).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
     train_loader = DataLoader(TensorDataset(X_train_tensor, y_train_tensor, y_train_quality_tensor, y_train_essay_type_tensor, y_train_content_tensor, 
                                              y_train_organization_tensor, y_train_word_choice_tensor, y_train_sentence_fluency_tensor,
-                                             y_train_conventions_tensor, y_train_language_tensor, y_train_prompt_adherence_tensor,
-                                             y_train_narrativity_tensor, y_train_style_tensor, y_train_voice_tensor), 
+                                             y_train_conventions_tensor), 
                               batch_size=batch_size, shuffle=True)
 
     # Initialize Label Smoothing loss
@@ -320,22 +358,20 @@ def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor,
     for epoch in range(epochs):
         model.train()
         epoch_loss = 0
+
         for X_batch, y_score_batch, y_quality_batch, y_essay_type_batch, y_content_batch, y_organization_batch, \
-        y_word_choice_batch, y_sentence_fluency_batch, y_conventions_batch, y_language_batch, \
-        y_prompt_adherence_batch, y_narrativity_batch, y_style_batch, y_voice_batch in train_loader:
+        y_word_choice_batch, y_sentence_fluency_batch, y_conventions_batch in train_loader:
             
             # Move data to device
             X_batch, y_score_batch, y_quality_batch, y_essay_type_batch = X_batch.to(device), y_score_batch.to(device), y_quality_batch.to(device), y_essay_type_batch.to(device)
             y_content_batch, y_organization_batch, y_word_choice_batch = y_content_batch.to(device), y_organization_batch.to(device), y_word_choice_batch.to(device)
-            y_sentence_fluency_batch, y_conventions_batch, y_language_batch = y_sentence_fluency_batch.to(device), y_conventions_batch.to(device), y_language_batch.to(device)
-            y_prompt_adherence_batch, y_narrativity_batch, y_style_batch, y_voice_batch = y_prompt_adherence_batch.to(device), y_narrativity_batch.to(device), y_style_batch.to(device), y_voice_batch.to(device)
+            y_sentence_fluency_batch, y_conventions_batch = y_sentence_fluency_batch.to(device), y_conventions_batch.to(device)
             
             optimizer.zero_grad()
             
             # Unpack all 13 outputs from the model
             pred_score, pred_quality, pred_essay_type, pred_content, pred_organization, pred_word_choice, \
-            pred_sentence_fluency, pred_conventions, pred_language, pred_prompt_adherence, pred_narrativity, \
-            pred_style, pred_voice = model(X_batch)
+            pred_sentence_fluency, pred_conventions = model(X_batch)
 
             # Calculate the losses
             mse_loss = nn.MSELoss()(pred_score, y_score_batch).mean()  # Ensure it's a scalar
@@ -348,11 +384,6 @@ def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor,
             mse_loss_word_choice = nn.MSELoss()(pred_word_choice, y_word_choice_batch)
             mse_loss_sentence_fluency = nn.MSELoss()(pred_sentence_fluency, y_sentence_fluency_batch)
             mse_loss_conventions = nn.MSELoss()(pred_conventions, y_conventions_batch)
-            mse_loss_language = nn.MSELoss()(pred_language, y_language_batch)
-            mse_loss_prompt_adherence = nn.MSELoss()(pred_prompt_adherence, y_prompt_adherence_batch)
-            mse_loss_narrativity = nn.MSELoss()(pred_narrativity, y_narrativity_batch)
-            mse_loss_style = nn.MSELoss()(pred_style, y_style_batch)
-            mse_loss_voice = nn.MSELoss()(pred_voice, y_voice_batch)
 
             # Compute uncertainty loss
             uncertainty_loss = model.compute_uncertainty_loss(mse_loss, cross_entropy_loss_quality).mean()  # Ensure it's a scalar
@@ -360,8 +391,7 @@ def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor,
             # Total loss is a combination of all these
             total_loss = (mse_loss + cross_entropy_loss_quality + cross_entropy_loss_essay_type + uncertainty_loss) / 4  # Average loss
             total_loss += mse_loss_content + mse_loss_organization + mse_loss_word_choice + \
-                          mse_loss_sentence_fluency + mse_loss_conventions + mse_loss_language + \
-                          mse_loss_prompt_adherence + mse_loss_narrativity + mse_loss_style + mse_loss_voice
+                          mse_loss_sentence_fluency + mse_loss_conventions 
 
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)  # Adjust max_norm if necessary
@@ -370,8 +400,8 @@ def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor,
 
         print(f"Epoch {epoch + 1}/{epochs}, Total Epoch Loss: {epoch_loss / len(train_loader):.4f}")
 
-    model_filename = f"albert2_model_{embedding_type or 'albert'}.pth"
-    embedding_size_filename = f"albert2_embedding_size_{embedding_type or 'albert'}.npy"
+    model_filename = f"albert_model_{embedding_type or 'albert'}.pth"
+    embedding_size_filename = f"albert_embedding_size_{embedding_type or 'albert'}.npy"
     torch.save(model.state_dict(), os.path.join(save_dir, model_filename))
     np.save(os.path.join(save_dir, embedding_size_filename), input_shape)
     
@@ -380,20 +410,59 @@ def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor,
 
 def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_essay_type, 
                    y_test_content, y_test_organization, y_test_word_choice, y_test_sentence_fluency,
-                   y_test_conventions, y_test_language, y_test_prompt_adherence, y_test_narrativity,
-                   y_test_style, y_test_voice, save_dir):
-    """
-    Evaluate the trained model on the test set and print various metrics.
+                   y_test_conventions, save_dir, model_name):
 
-    Args:
-        model_path: Path to the saved model file.
-        X_test_tensor: Test features as PyTorch tensors.
-        y_test: Ground truth scores for regression.
-        y_test_quality: Ground truth labels for quality classification.
-        y_test_essay_type: Ground truth labels for essay type classification.
-        save_dir: Directory to save results (if needed).
+    """
+    Evaluate a multitask model on test data and visualize results, including confusion matrices and kappa heatmaps.
+
+    This function loads a pretrained multitask model, computes regression and classification metrics on test data, 
+    and generates visualizations to assess model performance. It calculates metrics for overall essay score, quality, 
+    and essay type classifications, as well as kappa scores for content, organization, word choice, sentence fluency, 
+    and conventions attributes.
+
+    Parameters:
+    ----------
+    model_path : str
+        Path to the saved model file.
+    X_test_tensor : torch.Tensor
+        Test features as a PyTorch tensor.
+    y_test : torch.Tensor or np.ndarray
+        Ground truth scores for the primary regression task.
+    y_test_quality : torch.Tensor
+        Ground truth labels for quality classification.
+    y_test_essay_type : torch.Tensor
+        Ground truth labels for essay type classification.
+    y_test_content : torch.Tensor
+        Ground truth labels for the content attribute.
+    y_test_organization : torch.Tensor
+        Ground truth labels for the organization attribute.
+    y_test_word_choice : torch.Tensor
+        Ground truth labels for the word choice attribute.
+    y_test_sentence_fluency : torch.Tensor
+        Ground truth labels for the sentence fluency attribute.
+    y_test_conventions : torch.Tensor
+        Ground truth labels for the conventions attribute.
+    save_dir : str
+        Directory where model files are stored (not directly used but may be needed for loading auxiliary files).
+    model_name : str
+        Name of the model being evaluated, used for labeling in visualizations.
+
+    Returns:
+    -------
+    tuple
+        A tuple containing various evaluation metrics:
+        - MSE for score
+        - Accuracy, F1 score, and Kappa for quality classification
+        - Accuracy, F1 score, and Kappa for essay type classification
+        - Kappa scores for content, organization, word choice, sentence fluency, and conventions attributes.
+    
+    Notes:
+    ------
+    - Confusion matrices are generated for both quality and essay type classifications.
+    - Kappa scores for each attribute are visualized in a heatmap.
     """
 
+    # Load the model and move it to the appropriate device
     model = MultiTaskModel(X_test_tensor.shape[1]).to(device)  # Move model to device
     model.load_state_dict(torch.load(model_path))
     model.eval()
@@ -407,18 +476,12 @@ def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_ess
     y_test_word_choice = y_test_word_choice.to(device)
     y_test_sentence_fluency = y_test_sentence_fluency.to(device)
     y_test_conventions = y_test_conventions.to(device)
-    y_test_language = y_test_language.to(device)
-    y_test_prompt_adherence = y_test_prompt_adherence.to(device)
-    y_test_narrativity = y_test_narrativity.to(device)
-    y_test_style = y_test_style.to(device)
-    y_test_voice = y_test_voice.to(device)
 
     with torch.no_grad():
         # Get model predictions (all outputs)
         pred_scores, pred_qualities, pred_essay_types, pred_content, pred_organization, pred_word_choice, \
-        pred_sentence_fluency, pred_conventions, pred_language, pred_prompt_adherence, pred_narrativity, \
-        pred_style, pred_voice = model(X_test_tensor)
-        
+        pred_sentence_fluency, pred_conventions = model(X_test_tensor)
+
         # Ensure y_test is a tensor and move to CPU if it's a numpy array
         if isinstance(y_test, np.ndarray):
             y_test = torch.tensor(y_test, dtype=torch.float32).to(device)
@@ -437,18 +500,27 @@ def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_ess
         f1_essay_type = f1_score(y_test_essay_type.cpu().numpy(), y_pred_essay_types, average='weighted')
         accuracy_essay_type = accuracy_score(y_test_essay_type.cpu().numpy(), y_pred_essay_types)
         kappa_essay_type = cohen_kappa_score(y_test_essay_type.cpu().numpy(), y_pred_essay_types, weights='quadratic')  # Quadratic Kappa for essay type
-        
-        # Regression metrics for the additional attributes (content, organization, word_choice, etc.)
-        mse_content = mean_squared_error(y_test_content.cpu().numpy(), pred_content.cpu().numpy())
-        mse_organization = mean_squared_error(y_test_organization.cpu().numpy(), pred_organization.cpu().numpy())
-        mse_word_choice = mean_squared_error(y_test_word_choice.cpu().numpy(), pred_word_choice.cpu().numpy())
-        mse_sentence_fluency = mean_squared_error(y_test_sentence_fluency.cpu().numpy(), pred_sentence_fluency.cpu().numpy())
-        mse_conventions = mean_squared_error(y_test_conventions.cpu().numpy(), pred_conventions.cpu().numpy())
-        mse_language = mean_squared_error(y_test_language.cpu().numpy(), pred_language.cpu().numpy())
-        mse_prompt_adherence = mean_squared_error(y_test_prompt_adherence.cpu().numpy(), pred_prompt_adherence.cpu().numpy())
-        mse_narrativity = mean_squared_error(y_test_narrativity.cpu().numpy(), pred_narrativity.cpu().numpy())
-        mse_style = mean_squared_error(y_test_style.cpu().numpy(), pred_style.cpu().numpy())
-        mse_voice = mean_squared_error(y_test_voice.cpu().numpy(), pred_voice.cpu().numpy())
+
+        # Kappa scores for each attribute
+        y_pred_content = pred_essay_types.argmax(dim=1).cpu().numpy()
+        kappa_content = cohen_kappa_score(y_test_content.cpu().numpy(), y_pred_content, weights='quadratic')
+
+        y_pred_organization = pred_essay_types.argmax(dim=1).cpu().numpy()
+        kappa_organization = cohen_kappa_score(y_test_organization.cpu().numpy(), y_pred_organization, weights='quadratic')
+
+        y_pred_word_choice = pred_essay_types.argmax(dim=1).cpu().numpy()
+        kappa_word_choice = cohen_kappa_score(y_test_word_choice.cpu().numpy(), y_pred_word_choice, weights='quadratic')
+
+        y_pred_sentence_fluency = pred_essay_types.argmax(dim=1).cpu().numpy()
+        kappa_sentence_fluency = cohen_kappa_score(y_test_sentence_fluency.cpu().numpy(), y_pred_sentence_fluency, weights='quadratic')
+
+        y_pred_conventions = pred_essay_types.argmax(dim=1).cpu().numpy()
+        kappa_conventions = cohen_kappa_score(y_test_conventions.cpu().numpy(), y_pred_conventions, weights='quadratic')
+
+        plot_confusion_matrices(y_test_quality.cpu().numpy(), y_pred_qualities, y_test_essay_type.cpu().numpy(), y_pred_essay_types)
+
+        attribute_kappa_scores = [kappa_content, kappa_organization, kappa_word_choice, kappa_sentence_fluency, kappa_conventions]
+        plot_kappa_heatmap([attribute_kappa_scores], model_names=[model_name], attribute_names=['Content', 'Organization', 'Word Choice', 'Sentence Fluency', 'Conventions'])
 
     # Print out the evaluation results
     print(f"Evaluation Results: \nMSE for Score: {mse}")
@@ -458,22 +530,16 @@ def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_ess
     print(f"Essay Type Classification Accuracy: {accuracy_essay_type:.5f}")
     print(f"Essay Type Classification F1 Score: {f1_essay_type:.5f}")
     print(f"Essay Type Classification Quadratic Kappa: {kappa_essay_type:.5f}")
-    
-    # Print out the MSE for each of the additional attributes
-    print(f"MSE for Content: {mse_content:.5f}")
-    print(f"MSE for Organization: {mse_organization:.5f}")
-    print(f"MSE for Word Choice: {mse_word_choice:.5f}")
-    print(f"MSE for Sentence Fluency: {mse_sentence_fluency:.5f}")
-    print(f"MSE for Conventions: {mse_conventions:.5f}")
-    print(f"MSE for Language: {mse_language:.5f}")
-    print(f"MSE for Prompt Adherence: {mse_prompt_adherence:.5f}")
-    print(f"MSE for Narrativity: {mse_narrativity:.5f}")
-    print(f"MSE for Style: {mse_style:.5f}")
-    print(f"MSE for Voice: {mse_voice:.5f}")
+
+    # Print out Kappa scores for each attribute
+    print(f"Kappa for Content: {kappa_content:.5f}")
+    print(f"Kappa for Organization: {kappa_organization:.5f}")
+    print(f"Kappa for Word Choice: {kappa_word_choice:.5f}")
+    print(f"Kappa for Sentence Fluency: {kappa_sentence_fluency:.5f}")
+    print(f"Kappa for Conventions: {kappa_conventions:.5f}")
 
     return mse, accuracy_quality, f1_quality, kappa_quality, accuracy_essay_type, f1_essay_type, kappa_essay_type, \
-           mse_content, mse_organization, mse_word_choice, mse_sentence_fluency, mse_conventions, mse_language, \
-           mse_prompt_adherence, mse_narrativity, mse_style, mse_voice
+           kappa_content, kappa_organization, kappa_word_choice, kappa_sentence_fluency, kappa_conventions
 
 def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, fasttext_model=None, min_score=0, max_score=100, attribute_ranges=None):
     """
@@ -494,8 +560,7 @@ def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, f
             - formatted_score (float): The normalized and formatted score between 0 and 100.
             - quality_label (str): The quality level ("Low", "Medium", or "High").
             - essay_type (str): The type of essay ("Argumentative", "Dependent", or "Narrative").
-            - content_score, organization_score, word_choice_score, sentence_fluency_score, conventions_score,
-              language_score, prompt_adherence_score, narrativity_score, style_score, voice_score (int):
+            - content_score, organization_score, word_choice_score, sentence_fluency_score, conventions_score (int):
               Normalized scores for each of these specific attributes.
     """
     
@@ -521,8 +586,8 @@ def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, f
     embedding_tensor = torch.tensor(embedding, dtype=torch.float32).to(device).unsqueeze(0)
 
     # Load model files
-    embedding_size_filename = f"albert2_embedding_size_{embedding_type or 'albert'}.npy"
-    model_filename = f"albert2_model_{embedding_type or 'albert'}.pth"
+    embedding_size_filename = f"albert_embedding_size_{embedding_type or 'albert'}.npy"
+    model_filename = f"albert_model_{embedding_type or 'albert'}.pth"
     
     # Load the expected embedding size and model
     embedding_size_path = os.path.join(SAVE_DIR, embedding_size_filename)
@@ -542,8 +607,7 @@ def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, f
     # Make predictions
     with torch.no_grad():
         pred_score, pred_quality, pred_essay_type, pred_content, pred_organization, pred_word_choice, \
-        pred_sentence_fluency, pred_conventions, pred_language, pred_prompt_adherence, pred_narrativity, \
-        pred_style, pred_voice = model(embedding_resized)
+        pred_sentence_fluency, pred_conventions = model(embedding_resized)
         
         # Retrieve raw predictions for all attributes
         raw_score = pred_score.cpu().item()
@@ -556,11 +620,6 @@ def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, f
         word_choice_score = normalize_and_round_up(pred_word_choice.cpu().item(), *attribute_ranges['word_choice'])
         sentence_fluency_score = normalize_and_round_up(pred_sentence_fluency.cpu().item(), *attribute_ranges['sentence_fluency'])
         conventions_score = normalize_and_round_up(pred_conventions.cpu().item(), *attribute_ranges['conventions'])
-        language_score = normalize_and_round_up(pred_language.cpu().item(), *attribute_ranges['language'])
-        prompt_adherence_score = normalize_and_round_up(pred_prompt_adherence.cpu().item(), *attribute_ranges['prompt_adherence'])
-        narrativity_score = normalize_and_round_up(pred_narrativity.cpu().item(), *attribute_ranges['narrativity'])
-        style_score = normalize_and_round_up(pred_style.cpu().item(), *attribute_ranges['style'])
-        voice_score = normalize_and_round_up(pred_voice.cpu().item(), *attribute_ranges['voice'])
 
     # Normalize the overall score to a 0-100 range based on min and max score from training
     normalized_score = (raw_score - min_score) / (max_score - min_score) * 100
@@ -577,8 +636,7 @@ def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, f
     # Return all predictions
     formatted_score = round(normalized_score, 5)
     return formatted_score, quality_label, essay_type, content_score, organization_score, word_choice_score, \
-           sentence_fluency_score, conventions_score, language_score, prompt_adherence_score, narrativity_score, \
-           style_score, voice_score
+           sentence_fluency_score, conventions_score
 
 def generate_feedback(content, score, quality_level):
     """
@@ -663,8 +721,7 @@ def display_selected_attributes(essay_type, attributes):
     # Define the attribute mappings for each essay type
     attribute_mapping = {
         "Argumentative": ['content', 'organization', 'word_choice', 'sentence_fluency', 'conventions'],
-        "Dependent": ['content', 'prompt_adherence', 'language', 'narrativity'],
-        "Narrative": ['content', 'organization', 'style', 'conventions', 'voice', 'word_choice', 'sentence_fluency']
+        "Dependent": ['content'],
     }
     
     # Get the relevant attributes based on the essay type
@@ -674,3 +731,92 @@ def display_selected_attributes(essay_type, attributes):
     print(f"\nEssay Type: {essay_type}")
     for attr in relevant_attributes:
         print(f"{attr.capitalize().replace('_', ' ')}: {attributes[attr]}")
+
+def plot_confusion_matrices(y_test_quality, y_pred_qualities, y_test_essay_type, y_pred_essay_types):
+    """
+    Plot confusion matrices for quality and essay type classifications.
+
+    This function creates side-by-side confusion matrix plots to visualize 
+    the model's performance on quality and essay type classification tasks.
+
+    Parameters:
+    ----------
+    y_test_quality : array-like
+        True labels for the quality classification task.
+    y_pred_qualities : array-like
+        Predicted labels for the quality classification task.
+    y_test_essay_type : array-like
+        True labels for the essay type classification task.
+    y_pred_essay_types : array-like
+        Predicted labels for the essay type classification task.
+    """
+    # Plot confusion matrix for quality classification
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot confusion matrix for quality classification
+    cm_quality = confusion_matrix(y_test_quality, y_pred_qualities)
+    ConfusionMatrixDisplay(cm_quality).plot(ax=ax[0], cmap='Blues', values_format='d')
+    ax[0].set_title("Confusion Matrix for Quality Classification")
+
+    # Plot confusion matrix for essay type classification
+    cm_essay_type = confusion_matrix(y_test_essay_type, y_pred_essay_types)
+    ConfusionMatrixDisplay(cm_essay_type).plot(ax=ax[1], cmap='Greens', values_format='d')
+    ax[1].set_title("Confusion Matrix for Essay Type Classification")
+    
+    # Adjust layout for better viewing
+    plt.tight_layout()
+    plt.show()
+
+def plot_kappa_heatmap(kappa_scores, model_names, attribute_names):
+    """
+    Plot a heatmap of Kappa scores across models and attributes.
+
+    This function visualizes the Kappa scores for each model and attribute 
+    to assess agreement levels for content, organization, word choice, 
+    sentence fluency, and conventions.
+
+    Parameters:
+    ----------
+    kappa_scores : list of lists or 2D array
+        Kappa scores for each model and attribute. Each inner list contains scores for a specific model.
+    model_names : list of str
+        Names of the models, used as row labels in the heatmap.
+    attribute_names : list of str
+        Names of the attributes, used as column labels in the heatmap.
+    """
+    
+    # Ensure kappa_scores is a DataFrame-compatible structure
+    kappa_df = pd.DataFrame(kappa_scores, index=model_names, columns=attribute_names)
+    
+    # Create a heatmap to visualize Kappa scores across attributes and models
+    plt.figure(figsize=(10, 6))
+    sns.heatmap(kappa_df, annot=True, cmap="coolwarm", cbar_kws={'label': 'Kappa Score'}, fmt=".5f")
+    plt.title("Kappa Scores for Each Attribute Across Models")
+    plt.xlabel("Attribute")
+    plt.ylabel("Model Variant")
+    plt.show()
+
+def plot_training_history(train_losses, val_losses):
+    """
+    Plot training and validation loss over epochs to evaluate model performance.
+
+    This function visualizes the loss for training and validation sets over 
+    epochs, helping to assess whether the model may be underfitting or overfitting.
+
+    Parameters:
+    ----------
+    train_losses : list
+        Training loss values for each epoch.
+    val_losses : list
+        Validation loss values for each epoch.
+    """
+
+    # Plot the training and validation loss curves
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label='Training Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss Over Epochs')
+    plt.legend()
+    plt.show()

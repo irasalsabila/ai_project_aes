@@ -30,7 +30,7 @@ for path in [GLOVE_PATH, FASTTEXT_PATH, SAVE_DIR]:
     if not path.exists():
         raise FileNotFoundError(f"Path not found: {path}")
 
-client = Groq(api_key="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")
+client = Groq(api_key=api_key)
 
 @st.cache_resource
 def load_albert_model():
@@ -62,8 +62,7 @@ fasttext_model = load_fasttext_model(FASTTEXT_PATH)
 # Attribute ranges
 attribute_ranges = {
     'content': (0, 17), 'organization': (0, 16), 'word_choice': (0, 16),
-    'sentence_fluency': (0, 15), 'conventions': (0, 15), 'language': (0, 4),
-    'prompt_adherence': (0, 4), 'narrativity': (0, 4), 'style': (0, 0), 'voice': (0, 0)
+    'sentence_fluency': (0, 15), 'conventions': (0, 15)
 }
 
 # Display selected attributes based on essay type
@@ -112,8 +111,7 @@ if st.button("Evaluate"):
     results = {}
     for embedding_type in selected_embeddings:
         # Run predictions for each embedding type
-        score, quality_label, essay_type, content, organization, word_choice, sentence_fluency, conventions, \
-            language, prompt_adherence, narrativity, style, voice = testContent(
+        score, quality_label, essay_type, content, organization, word_choice, sentence_fluency = testContent(
                 user_input,
                 embedding_type=embedding_type,
                 SAVE_DIR=SAVE_DIR,
@@ -131,11 +129,6 @@ if st.button("Evaluate"):
             "word_choice": word_choice,
             "sentence_fluency": sentence_fluency,
             "conventions": conventions,
-            "language": language,
-            "prompt_adherence": prompt_adherence,
-            "narrativity": narrativity,
-            "style": style,
-            "voice": voice
         }
 
     # Generate a single feedback summary
@@ -162,8 +155,7 @@ for i, (embedding_name, result) in enumerate(results.items()):
         st.write("**Relevant Attributes:**")
         relevant_attributes = {
             "Argumentative": ['content', 'organization', 'word_choice', 'sentence_fluency', 'conventions'],
-            "Dependent": ['content', 'prompt_adherence', 'language', 'narrativity'],
-            "Narrative": ['content', 'organization', 'style', 'conventions', 'voice', 'word_choice', 'sentence_fluency']
+            "Dependent": ['content'],
         }
         
         # Get the attribute list for the essay type
