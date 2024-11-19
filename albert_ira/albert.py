@@ -52,10 +52,7 @@ class RegressionModel(nn.Module):
         return x
         
 class MultiTaskModel(nn.Module):
-    """
-    A multitask model for predicting both regression (score) and classification (quality).
-    This model can also predict other attributes relevant to essay quality.
-    """
+
     def __init__(self, input_shape):
         super(MultiTaskModel, self).__init__()
         # Shared layers
@@ -68,21 +65,18 @@ class MultiTaskModel(nn.Module):
         
         # Heads for different tasks
         self.regression_head = nn.Linear(128, 1)
-        self.classification_head = nn.Linear(128, 3)  # 3 classes: low, medium, high
-        self.essay_type_head = nn.Linear(128, 2)  # 3 types: argumentative, dependent, narrative
-
         # Learnable task uncertainty parameters
         self.task_uncertainty = nn.Parameter(torch.tensor([0.0, 0.0]), requires_grad=True)
 
         # Additional regression heads for other attributes (score between 0-10)
-        self.content_head = nn.Linear(128, 1)  # Content
-        self.organization_head = nn.Linear(128, 1)  # Organization
-        self.word_choice_head = nn.Linear(128, 1)  # Word Choice
-        self.sentence_fluency_head = nn.Linear(128, 1)  # Sentence Fluency
-        self.conventions_head = nn.Linear(128, 1)  # Conventions
-        self.language_head = nn.Linear(128, 1)  # Language
-        self.prompt_adherence_head = nn.Linear(128, 1)  # Prompt Adherence
-        self.narrativity_head = nn.Linear(128, 1)  # Narrativity
+        # self.content_head = nn.Linear(128, 1)  # Content
+        # self.organization_head = nn.Linear(128, 1)  # Organization
+        # self.word_choice_head = nn.Linear(128, 1)  # Word Choice
+        # self.sentence_fluency_head = nn.Linear(128, 1)  # Sentence Fluency
+        # self.conventions_head = nn.Linear(128, 1)  # Conventions
+        # self.language_head = nn.Linear(128, 1)  # Language
+        # self.prompt_adherence_head = nn.Linear(128, 1)  # Prompt Adherence
+        # self.narrativity_head = nn.Linear(128, 1)  # Narrativity
         # self.style_head = nn.Linear(128, 1)  # Style
         # self.voice_head = nn.Linear(128, 1)  # Voice
      
@@ -95,18 +89,18 @@ class MultiTaskModel(nn.Module):
         
         # Outputs for each task
         score_output = self.regression_head(x)
-        quality_output = self.classification_head(x)
-        essay_type_output = self.essay_type_head(x)
+        # quality_output = self.classification_head(x)
+        # essay_type_output = self.essay_type_head(x)
         
         # Additional regression outputs for the attributes
-        content_output = self.content_head(x)
-        organization_output = self.organization_head(x)
-        word_choice_output = self.word_choice_head(x)
-        sentence_fluency_output = self.sentence_fluency_head(x)
-        conventions_output = self.conventions_head(x)
-        language_output = self.language_head(x)
-        prompt_adherence_output = self.prompt_adherence_head(x)
-        narrativity_output = self.narrativity_head(x)
+        # content_output = self.content_head(x)
+        # organization_output = self.organization_head(x)
+        # word_choice_output = self.word_choice_head(x)
+        # sentence_fluency_output = self.sentence_fluency_head(x)
+        # conventions_output = self.conventions_head(x)
+        # language_output = self.language_head(x)
+        # prompt_adherence_output = self.prompt_adherence_head(x)
+        # narrativity_output = self.narrativity_head(x)
         # style_output = self.style_head(x)
         # voice_output = self.voice_head(x)
 
@@ -116,16 +110,6 @@ class MultiTaskModel(nn.Module):
                 language_output, prompt_adherence_output, narrativity_output)
 
     def compute_uncertainty_loss(self, loss_score, loss_quality):
-        """
-        Compute the total loss with task uncertainty weighting.
-        
-        Args:
-            loss_score: Loss for the regression task (score prediction).
-            loss_quality: Loss for the classification task (quality prediction).
-            
-        Returns:
-            Weighted total loss based on task uncertainties.
-        """
         precision1 = torch.exp(-self.task_uncertainty[0])
         precision2 = torch.exp(-self.task_uncertainty[1])
         
@@ -140,15 +124,6 @@ class MultiTaskModel(nn.Module):
                      y_score, y_quality, y_essay_type,
                      y_content, y_organization, y_word_choice,
                      y_sentence_fluency, y_conventions, y_language, y_prompt_adherence, y_narrativity) :
-        """
-        Calculate the combined loss for all tasks in the multitask model.
-        
-        Args:
-            Predictions and ground truth values for the main score and various quality attributes.
-            
-        Returns:
-            Total loss calculated as a combination of regression and classification losses.
-        """
 
         mse_loss = nn.MSELoss()(pred_score, y_score)
         cross_entropy_loss_quality = nn.CrossEntropyLoss()(pred_quality, y_quality)
@@ -213,16 +188,6 @@ def get_albert_embedding(text):
     return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
 def get_word_embedding(text, embedding_dict):
-    """
-    Generate a word embedding by averaging embeddings of individual words in the text.
-    
-    Args:
-        text: Input text.
-        embedding_dict: Preloaded word embeddings (e.g., GloVe or FastText).
-        
-    Returns:
-        Averaged word embedding vector.
-    """
     words = text.lower().split()
     vectors = [embedding_dict[word] for word in words if word in embedding_dict]
     if vectors:
@@ -230,16 +195,6 @@ def get_word_embedding(text, embedding_dict):
     return np.zeros(300)  # Return zero vector if no words match
 
 def create_attention_based_embedding(albert_emb, additional_emb):
-    """
-    Fuse ALBERT embedding with additional word embedding using attention-based fusion.
-    
-    Args:
-        albert_emb: ALBERT embedding vector.
-        additional_emb: Additional word embedding vector.
-        
-    Returns:
-        Fused embedding vector.
-    """
     if albert_emb.shape != additional_emb.shape:
         additional_emb = torch.nn.Linear(additional_emb.shape[0], albert_emb.shape[0]).to(albert_emb.device)(additional_emb)
     combined_emb = torch.cat([albert_emb.unsqueeze(0), additional_emb.unsqueeze(0)], dim=0)
@@ -249,18 +204,6 @@ def create_attention_based_embedding(albert_emb, additional_emb):
     return fused_embedding
 
 def create_combined_embedding(text, embedding_type=None, _glove_model=None, _fasttext_model=None):
-    """
-    Create a combined embedding for a given text, optionally incorporating additional embeddings.
-
-    Args:
-        text: Input text for which to create the embedding.
-        embedding_type: Type of additional embedding to use ("glove" or "fasttext").
-        _glove_model: Preloaded GloVe embeddings, if using GloVe.
-        _fasttext_model: Preloaded FastText embeddings, if using FastText.
-
-    Returns:
-        A tuple containing the combined embedding and its size.
-    """
 
     albert_emb = get_albert_embedding(text).flatten()
 
@@ -295,58 +238,7 @@ def train_and_save_model(X_train_tensor, y_train_tensor, y_train_quality_tensor,
                          y_train_prompt_adherence_tensor, y_train_narrativity_tensor, input_shape, save_dir, 
                          embedding_type=None, epochs=10, batch_size=8, learning_rate=1e-4):
 
-    """
-    Train a multitask model on essay data for regression and classification tasks, and save the trained model.
-
-    This function trains a multitask neural network on a dataset of essay features, where the model predicts an 
-    overall essay score (regression), quality category, essay type, and several attribute scores such as content, 
-    organization, word choice, sentence fluency, and conventions. The function uses label smoothing for classification
-    tasks to reduce overfitting, and task uncertainty weighting for loss balancing between different tasks.
-
-    Parameters:
-    ----------
-    X_train_tensor : torch.Tensor
-        The training input features as a PyTorch tensor.
-    y_train_tensor : torch.Tensor
-        Ground truth scores for the primary regression task.
-    y_train_quality_tensor : torch.Tensor
-        Ground truth labels for quality classification.
-    y_train_essay_type_tensor : torch.Tensor
-        Ground truth labels for essay type classification.
-    y_train_content_tensor : torch.Tensor
-        Ground truth labels for the content attribute.
-    y_train_organization_tensor : torch.Tensor
-        Ground truth labels for the organization attribute.
-    y_train_word_choice_tensor : torch.Tensor
-        Ground truth labels for the word choice attribute.
-    y_train_sentence_fluency_tensor : torch.Tensor
-        Ground truth labels for the sentence fluency attribute.
-    y_train_conventions_tensor : torch.Tensor
-        Ground truth labels for the conventions attribute.
-    input_shape : int
-        The shape (number of features) of the input to the model.
-    save_dir : str
-        The directory to save the trained model and embedding size file.
-    epochs : int, optional, default=10
-        The number of epochs to train the model.
-    batch_size : int, optional, default=8
-        The number of samples per batch for training.
-    learning_rate : float, optional, default=1e-4
-        The learning rate for the optimizer.
-
-    Returns:
-    -------
-    str
-        The file path of the saved model.
     
-    Notes:
-    ------
-    - This function computes a combined loss across multiple tasks, including regression for score prediction,
-      classification for quality and essay type, and additional regression tasks for specific attributes.
-    - The model is saved at the end of training along with the embedding size to facilitate consistent embedding 
-      processing during inference.
-    """
-
     model = MultiTaskModel(input_shape).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
     train_loader = DataLoader(TensorDataset(
@@ -423,56 +315,7 @@ def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_ess
                    y_test_content, y_test_organization, y_test_word_choice, y_test_sentence_fluency,
                    y_test_conventions, y_test_language, y_test_prompt_adherence, y_test_narrativity, save_dir, model_name):
 
-    """
-    Evaluate a multitask model on test data and visualize results, including confusion matrices and kappa heatmaps.
-
-    This function loads a pretrained multitask model, computes regression and classification metrics on test data, 
-    and generates visualizations to assess model performance. It calculates metrics for overall essay score, quality, 
-    and essay type classifications, as well as kappa scores for content, organization, word choice, sentence fluency, 
-    and conventions attributes.
-
-    Parameters:
-    ----------
-    model_path : str
-        Path to the saved model file.
-    X_test_tensor : torch.Tensor
-        Test features as a PyTorch tensor.
-    y_test : torch.Tensor or np.ndarray
-        Ground truth scores for the primary regression task.
-    y_test_quality : torch.Tensor
-        Ground truth labels for quality classification.
-    y_test_essay_type : torch.Tensor
-        Ground truth labels for essay type classification.
-    y_test_content : torch.Tensor
-        Ground truth labels for the content attribute.
-    y_test_organization : torch.Tensor
-        Ground truth labels for the organization attribute.
-    y_test_word_choice : torch.Tensor
-        Ground truth labels for the word choice attribute.
-    y_test_sentence_fluency : torch.Tensor
-        Ground truth labels for the sentence fluency attribute.
-    y_test_conventions : torch.Tensor
-        Ground truth labels for the conventions attribute.
-    save_dir : str
-        Directory where model files are stored (not directly used but may be needed for loading auxiliary files).
-    model_name : str
-        Name of the model being evaluated, used for labeling in visualizations.
-
-    Returns:
-    -------
-    tuple
-        A tuple containing various evaluation metrics:
-        - MSE for score
-        - Accuracy, F1 score, and Kappa for quality classification
-        - Accuracy, F1 score, and Kappa for essay type classification
-        - Kappa scores for content, organization, word choice, sentence fluency, and conventions attributes.
     
-    Notes:
-    ------
-    - Confusion matrices are generated for both quality and essay type classifications.
-    - Kappa scores for each attribute are visualized in a heatmap.
-    """
-
     # Load the model and move it to the appropriate device
     model = MultiTaskModel(X_test_tensor.shape[1]).to(device)  # Move model to device
     model.load_state_dict(torch.load(model_path))
@@ -573,27 +416,7 @@ def evaluate_model(model_path, X_test_tensor, y_test, y_test_quality, y_test_ess
 
 
 def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, fasttext_model=None, min_score=0, max_score=100, attribute_ranges=None):
-    """
-    Generate predictions for a given essay content using the specified model and embeddings.
-
-    Args:
-        content (str): The text of the essay to evaluate.
-        embedding_type (str, optional): The type of additional embedding to use ("glove" or "fasttext").
-        SAVE_DIR (str, optional): Directory where model files are stored.
-        glove_model (dict, optional): Preloaded GloVe embeddings if using GloVe.
-        fasttext_model (dict, optional): Preloaded FastText embeddings if using FastText.
-        min_score (int, optional): Minimum score range for normalizing the predicted score.
-        max_score (int, optional): Maximum score range for normalizing the predicted score.
-        attribute_ranges (dict, optional): Dictionary containing min and max ranges for each attribute in the dataset.
-
-    Returns:
-        tuple: A tuple containing:
-            - formatted_score (float): The normalized and formatted score between 0 and 100.
-            - quality_label (str): The quality level ("Low", "Medium", or "High").
-            - essay_type (str): The type of essay ("Argumentative", "Dependent", or "Narrative").
-            - content_score, organization_score, word_choice_score, sentence_fluency_score, conventions_score (int):
-              Normalized scores for each of these specific attributes.
-    """
+    
     
     if attribute_ranges is None:
         raise ValueError("attribute_ranges must be provided.")
@@ -673,17 +496,6 @@ def testContent(content, embedding_type=None, SAVE_DIR=None, glove_model=None, f
            sentence_fluency_score, conventions_score, language_score, prompt_adherence_score, narrativity_score
            
 def generate_feedback(content, score, quality_level):
-    """
-    Generate feedback based on essay content, score, and quality level.
-
-    Args:
-        content: Essay content.
-        score: Predicted score.
-        quality_level: Predicted quality level.
-
-    Returns:
-        Generated feedback text.
-    """
 
     quality_text = {0: "low", 1: "medium", 2: "high"}.get(quality_level, "unknown")
     
@@ -745,13 +557,7 @@ def normalize_and_round_up(attribute_value, min_value, max_value):
     return math.ceil(scaled_value)
 
 def display_selected_attributes(essay_type, attributes):
-    """
-    Display only relevant attributes based on the essay type.
-
-    Args:
-        essay_type: Type of essay (e.g., Argumentative, Dependent, Narrative).
-        attributes: Dictionary of attribute scores.
-    """    
+   
     # Define the attribute mappings for each essay type
     attribute_mapping = {
         "Argumentative": ['content', 'organization', 'word_choice', 'sentence_fluency', 'conventions'],
@@ -767,23 +573,7 @@ def display_selected_attributes(essay_type, attributes):
         print(f"{attr.capitalize().replace('_', ' ')}: {attributes[attr]}")
 
 def plot_confusion_matrices(y_test_quality, y_pred_qualities, y_test_essay_type, y_pred_essay_types):
-    """
-    Plot confusion matrices for quality and essay type classifications.
 
-    This function creates side-by-side confusion matrix plots to visualize 
-    the model's performance on quality and essay type classification tasks.
-
-    Parameters:
-    ----------
-    y_test_quality : array-like
-        True labels for the quality classification task.
-    y_pred_qualities : array-like
-        Predicted labels for the quality classification task.
-    y_test_essay_type : array-like
-        True labels for the essay type classification task.
-    y_pred_essay_types : array-like
-        Predicted labels for the essay type classification task.
-    """
     # Plot confusion matrix for quality classification
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
     
@@ -802,22 +592,6 @@ def plot_confusion_matrices(y_test_quality, y_pred_qualities, y_test_essay_type,
     plt.show()
 
 def plot_kappa_heatmap(kappa_scores, model_names, attribute_names):
-    """
-    Plot a heatmap of Kappa scores across models and attributes.
-
-    This function visualizes the Kappa scores for each model and attribute 
-    to assess agreement levels for content, organization, word choice, 
-    sentence fluency, and conventions.
-
-    Parameters:
-    ----------
-    kappa_scores : list of lists or 2D array
-        Kappa scores for each model and attribute. Each inner list contains scores for a specific model.
-    model_names : list of str
-        Names of the models, used as row labels in the heatmap.
-    attribute_names : list of str
-        Names of the attributes, used as column labels in the heatmap.
-    """
     
     # Ensure kappa_scores is a DataFrame-compatible structure
     kappa_df = pd.DataFrame(kappa_scores, index=model_names, columns=attribute_names)
@@ -831,20 +605,7 @@ def plot_kappa_heatmap(kappa_scores, model_names, attribute_names):
     plt.show()
 
 def plot_training_history(train_losses, val_losses):
-    """
-    Plot training and validation loss over epochs to evaluate model performance.
-
-    This function visualizes the loss for training and validation sets over 
-    epochs, helping to assess whether the model may be underfitting or overfitting.
-
-    Parameters:
-    ----------
-    train_losses : list
-        Training loss values for each epoch.
-    val_losses : list
-        Validation loss values for each epoch.
-    """
-
+    
     # Plot the training and validation loss curves
     plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label='Training Loss')
