@@ -113,6 +113,12 @@ Notebook for building and training an RNN-based classifier for predicting essay 
    - Run the evaluation function to compute performance metrics of Quadratic Weighted Kappa (QWK) for desired attribute.
 
 ---
+## Team Members
+
+- **Iman Andrea** [@AerdnaNami](https://github.com/AerdnaNami)
+- **Amina Tariq** [@atzaffar](https://github.com/atzaffar)
+- **Salsabila Zahirah** [@irasalsabila](https://github.com/irasalsabila)
+---
 
 ## Acknowledgments
 
