@@ -69,7 +69,7 @@ def get_scores(feature):
     list_6 = []
     # getting essays that are the scores in num
     for i,j in zip(range(len(df)),df["essay"]):
-        if df[feature][i] == 0: # essays scored 0
+        if df[feature][i] == 0: # essays scored 1
             list_0.append(j)
         if df[feature][i] == 1: # essays scored 1
             list_1.append(j)
@@ -86,7 +86,8 @@ def get_scores(feature):
 
         data = list(itertools.chain(list_0,list_1,list_2,list_3,list_4,list_5,list_6))
 
-    return list_0, list_1, list_2, list_3, list_4, list_5, list_6, data
+    return list_0,list_1, list_2, list_3, list_4, list_5, list_6, data
+
 
 list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_lang = get_scores(feature = feature_1)
 score_lang_0 = gen_num(0,len(list_0))
@@ -96,7 +97,7 @@ score_lang_3 = gen_num(3,len(list_3))
 score_lang_4 = gen_num(4,len(list_4))
 score_lang_5 = gen_num(5,len(list_5))
 score_lang_6 = gen_num(6,len(list_6))
-score_lang = list(itertools.chain(score_lang_1,score_lang_2,score_lang_3,score_lang_4,score_lang_5,score_lang_6))
+score_lang = list(itertools.chain(score_lang_0, score_lang_1,score_lang_2,score_lang_3,score_lang_4,score_lang_5,score_lang_6))
 print(len(score_lang), len(data_lang))
 
 list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_prompt = get_scores(feature=feature_2)
@@ -107,7 +108,7 @@ score_prompt_3 = gen_num(3,len(list_3))
 score_prompt_4 = gen_num(4,len(list_4))
 score_prompt_5 = gen_num(5,len(list_5))
 score_prompt_6 = gen_num(6,len(list_6))
-score_prompt = list(itertools.chain(score_prompt_1,score_prompt_2,score_prompt_3,score_prompt_4,score_prompt_5,score_prompt_6))
+score_prompt = list(itertools.chain(score_prompt_0, score_prompt_1,score_prompt_2,score_prompt_3,score_prompt_4,score_prompt_5,score_prompt_6))
 print(len(score_prompt), len(data_prompt))
 
 list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_nar = get_scores(feature=feature_3)
@@ -118,8 +119,9 @@ score_nar_3 = gen_num(3,len(list_3))
 score_nar_4 = gen_num(4,len(list_4))
 score_nar_5 = gen_num(5,len(list_5))
 score_nar_6 = gen_num(6,len(list_6))
-score_nar = list(itertools.chain(score_nar_1,score_nar_2,score_nar_3,score_nar_4,score_nar_5,score_nar_6))
+score_nar = list(itertools.chain(score_nar_0,score_nar_1,score_nar_2,score_nar_3,score_nar_4,score_nar_5,score_nar_6))
 print(len(score_nar), len(data_nar))
+
 
 dictionary_lang = {'essay': data_lang, 'score_lang': score_lang}
 dictionary_prompt = {'essay': data_prompt, 'score_prompt': score_prompt}

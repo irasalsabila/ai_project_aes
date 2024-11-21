@@ -52,7 +52,7 @@ data_lang = []
 data_prompt = []
 data_nar = []
 
-num = [1,2,3,4,5,6]
+num = [0,1,2,3,4,5,6]
 count = 0
 
 def gen_num(num,length):
@@ -60,6 +60,7 @@ def gen_num(num,length):
     return num_list
 
 def get_scores(feature):
+    list_0 = []
     list_1 = []
     list_2 = []
     list_3 = []
@@ -68,6 +69,8 @@ def get_scores(feature):
     list_6 = []
     # getting essays that are the scores in num
     for i,j in zip(range(len(df)),df["essay"]):
+        if df[feature][i] == 0: # essays scored 1
+            list_0.append(j)
         if df[feature][i] == 1: # essays scored 1
             list_1.append(j)
         if df[feature][i] == 2:
@@ -81,38 +84,42 @@ def get_scores(feature):
         if df[feature][i] == 6:
             list_6.append(j)
 
-        data = list(itertools.chain(list_1,list_2,list_3,list_4,list_5,list_6))
+        data = list(itertools.chain(list_0,list_1,list_2,list_3,list_4,list_5,list_6))
 
-    return list_1, list_2, list_3, list_4, list_5, list_6, data
+    return list_0,list_1, list_2, list_3, list_4, list_5, list_6, data
 
-list_1, list_2, list_3, list_4, list_5, list_6, data_lang = get_scores(feature = feature_1)
+
+list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_lang = get_scores(feature = feature_1)
+score_lang_0 = gen_num(0,len(list_0))
 score_lang_1 = gen_num(1,len(list_1))
 score_lang_2 = gen_num(2,len(list_2))
 score_lang_3 = gen_num(3,len(list_3))
 score_lang_4 = gen_num(4,len(list_4))
 score_lang_5 = gen_num(5,len(list_5))
 score_lang_6 = gen_num(6,len(list_6))
-score_lang = list(itertools.chain(score_lang_1,score_lang_2,score_lang_3,score_lang_4,score_lang_5,score_lang_6))
+score_lang = list(itertools.chain(score_lang_0, score_lang_1,score_lang_2,score_lang_3,score_lang_4,score_lang_5,score_lang_6))
 print(len(score_lang), len(data_lang))
 
-list_1, list_2, list_3, list_4, list_5, list_6, data_prompt = get_scores(feature=feature_2)
+list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_prompt = get_scores(feature=feature_2)
+score_prompt_0 = gen_num(0,len(list_0))
 score_prompt_1 = gen_num(1,len(list_1))
 score_prompt_2 = gen_num(2,len(list_2))
 score_prompt_3 = gen_num(3,len(list_3))
 score_prompt_4 = gen_num(4,len(list_4))
 score_prompt_5 = gen_num(5,len(list_5))
 score_prompt_6 = gen_num(6,len(list_6))
-score_prompt = list(itertools.chain(score_prompt_1,score_prompt_2,score_prompt_3,score_prompt_4,score_prompt_5,score_prompt_6))
+score_prompt = list(itertools.chain(score_prompt_0, score_prompt_1,score_prompt_2,score_prompt_3,score_prompt_4,score_prompt_5,score_prompt_6))
 print(len(score_prompt), len(data_prompt))
 
-list_1, list_2, list_3, list_4, list_5, list_6, data_nar = get_scores(feature=feature_3)
+list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_nar = get_scores(feature=feature_3)
+score_nar_0 = gen_num(0,len(list_0))
 score_nar_1 = gen_num(1,len(list_1))
 score_nar_2 = gen_num(2,len(list_2))
 score_nar_3 = gen_num(3,len(list_3))
 score_nar_4 = gen_num(4,len(list_4))
 score_nar_5 = gen_num(5,len(list_5))
 score_nar_6 = gen_num(6,len(list_6))
-score_nar = list(itertools.chain(score_nar_1,score_nar_2,score_nar_3,score_nar_4,score_nar_5,score_nar_6))
+score_nar = list(itertools.chain(score_nar_0,score_nar_1,score_nar_2,score_nar_3,score_nar_4,score_nar_5,score_nar_6))
 print(len(score_nar), len(data_nar))
 
 dictionary_lang = {'essay': data_lang, 'score_lang': score_lang}
@@ -126,6 +133,9 @@ df_nar = pd.DataFrame(dictionary_nar)
 print(df_lang)
 print(df_prompt)
 print(df_nar)
+
+
+nltk.download('stopwords')
 
 stop_words = set(stopwords.words('english'))
 len(stop_words) #finding stop words
@@ -144,46 +154,7 @@ def preprocess_for_bert(text_list, tokenizer, max_length=128):
     )
     return encoding['input_ids'], encoding['attention_mask']
 
-def get_multi_task_taglm_model_arg():
-    # Define input for token IDs and attention masks
-    input_ids = Input(shape=(None,), dtype=tf.int32, name="input_ids")  # Sequence length
-    attention_mask = Input(shape=(None,), dtype=tf.int32, name="attention_mask")
-
-    # Define a Lambda layer to ensure compatibility with BERT model and specify output shape
-    def call_bert(inputs):
-        input_ids, attention_mask = inputs
-        outputs = bert_model(input_ids=input_ids, attention_mask=attention_mask)
-        return outputs.last_hidden_state
-
-    # Wrap BERT in a Lambda layer and specify the output shape
-    bert_output = Lambda(lambda x: call_bert(x), output_shape=(None, 768))([input_ids, attention_mask])
-
-    # Shared GRU layers after BERT
-    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, dropout=0.5, return_sequences=True))(bert_output)
-    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64, dropout=0.5))(x)
-    x = Dropout(0.2)(x)
-
-    # Output layer for each score type
-    organization_score_output = Dense(1, activation='relu', name='org_score', kernel_regularizer=l2(0.01))(x)
-    word_choice_score_output = Dense(1, activation='relu', name='word_score', kernel_regularizer=l2(0.01))(x)
-    sentence_score_output = Dense(1, activation='relu', name='sentence_score', kernel_regularizer=l2(0.01))(x)
-    conventions_score_output = Dense(1, activation='relu', name='conventions_score', kernel_regularizer=l2(0.01))(x)
-
-    # Define the model with multiple outputs
-    model = Model(inputs=[input_ids, attention_mask], outputs=[organization_score_output, word_choice_score_output, sentence_score_output, conventions_score_output])
-
-    # Compile the model with a custom loss weight for each task if desired
-    model.compile(
-        loss={'org_score': 'mean_squared_error', 'word_score': 'mean_squared_error', 'sentence_score': 'mean_squared_error', 'conventions_score': 'mean_squared_error'},
-        optimizer=Adam(learning_rate=0.0001),  # Lower learning rate for fine-tuning
-        metrics={'org_score': 'mae', 'word_score': 'mae', 'sentence_score': 'mae', 'conventions_score': 'mae'}
-    )
-
-    model.summary()
-
-    return model
-
-def get_multi_task_taglm_model_source():
+def get_multitask_source():
     # Define input for token IDs and attention masks
     input_ids = Input(shape=(None,), dtype=tf.int32, name="input_ids")  # Sequence length
     attention_mask = Input(shape=(None,), dtype=tf.int32, name="attention_mask")
@@ -255,7 +226,7 @@ for traincv, testcv in cv.split(X):
     test_input_ids, test_attention_mask = preprocess_for_bert(test_essays, tokenizer, max_length=128)
 
     # Step 4: Initialize Multi-Task Model
-    lstm_model = get_multi_task_taglm_model_arg()
+    lstm_model = get_multitask_source()
     log_dir = "workspace/AI_project/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=1)
     # Early stopping callback
