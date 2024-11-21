@@ -58,7 +58,7 @@ data_lang = []
 data_prompt = []
 data_nar = []
 
-num = [1,2,3,4,5,6]
+num = [0,1,2,3,4,5,6]
 count = 0
 
 def gen_num(num,length):
@@ -66,6 +66,7 @@ def gen_num(num,length):
     return num_list
 
 def get_scores(feature):
+    list_0 = []
     list_1 = []
     list_2 = []
     list_3 = []
@@ -74,6 +75,8 @@ def get_scores(feature):
     list_6 = []
     # getting essays that are the scores in num
     for i,j in zip(range(len(df)),df["essay"]):
+        if df[feature][i] == 0: # essays scored 1
+            list_0.append(j)
         if df[feature][i] == 1: # essays scored 1
             list_1.append(j)
         if df[feature][i] == 2:
@@ -87,46 +90,50 @@ def get_scores(feature):
         if df[feature][i] == 6:
             list_6.append(j)
 
-        data = list(itertools.chain(list_1,list_2,list_3,list_4,list_5,list_6))
+        data = list(itertools.chain(list_0, list_1,list_2,list_3,list_4,list_5,list_6))
 
-    return list_1, list_2, list_3, list_4, list_5, list_6, data
+    return list_0, list_1, list_2, list_3, list_4, list_5, list_6, data
 
-list_1, list_2, list_3, list_4, list_5, list_6, data_org = get_scores(feature = feature_1)
+list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_org = get_scores(feature = feature_1)
+score_org_0 = gen_num(0,len(list_0))
 score_org_1 = gen_num(1,len(list_1))
 score_org_2 = gen_num(2,len(list_2))
 score_org_3 = gen_num(3,len(list_3))
 score_org_4 = gen_num(4,len(list_4))
 score_org_5 = gen_num(5,len(list_5))
 score_org_6 = gen_num(6,len(list_6))
-score_org = list(itertools.chain(score_org_1,score_org_2,score_org_3,score_org_4,score_org_5,score_org_6))
+score_org = list(itertools.chain(score_org_0,score_org_1,score_org_2,score_org_3,score_org_4,score_org_5,score_org_6))
 
-list_1, list_2, list_3, list_4, list_5, list_6, data_word = get_scores(feature=feature_2)
+list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_word = get_scores(feature=feature_2)
+score_word_0 = gen_num(0,len(list_0))
 score_word_1 = gen_num(1,len(list_1))
 score_word_2 = gen_num(2,len(list_2))
 score_word_3 = gen_num(3,len(list_3))
 score_word_4 = gen_num(4,len(list_4))
 score_word_5 = gen_num(5,len(list_5))
 score_word_6 = gen_num(6,len(list_6))
-score_word = list(itertools.chain(score_word_0, score_word_1,score_word_2,score_word_3,score_word_4,score_word_5,score_word_6))
+score_word = list(itertools.chain(score_word_0,score_word_1,score_word_2,score_word_3,score_word_4,score_word_5,score_word_6))
 
-list_1, list_2, list_3, list_4, list_5, list_6, data_sent = get_scores(feature=feature_3)
+list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_sent = get_scores(feature=feature_3)
+score_sent_0 = gen_num(0,len(list_0))
 score_sent_1 = gen_num(1,len(list_1))
 score_sent_2 = gen_num(2,len(list_2))
 score_sent_3 = gen_num(3,len(list_3))
 score_sent_4 = gen_num(4,len(list_4))
 score_sent_5 = gen_num(5,len(list_5))
 score_sent_6 = gen_num(6,len(list_6))
-score_sent = list(itertools.chain(score_sent_0, score_sent_1,score_sent_2,score_sent_3,score_sent_4,score_sent_5,score_sent_6))
+score_sent = list(itertools.chain(score_sent_0,score_sent_1,score_sent_2,score_sent_3,score_sent_4,score_sent_5,score_sent_6))
 print(len(score_sent), len(data_sent))
 
-list_1, list_2, list_3, list_4, list_5, list_6, data_conv = get_scores(feature=feature_4)
+list_0, list_1, list_2, list_3, list_4, list_5, list_6, data_conv = get_scores(feature=feature_4)
+score_conv_0 = gen_num(0,len(list_0))
 score_conv_1 = gen_num(1,len(list_1))
 score_conv_2 = gen_num(2,len(list_2))
 score_conv_3 = gen_num(3,len(list_3))
 score_conv_4 = gen_num(4,len(list_4))
 score_conv_5 = gen_num(5,len(list_5))
 score_conv_6 = gen_num(6,len(list_6))
-score_conv = list(itertools.chain(score_conv_0, score_conv_1,score_conv_2,score_conv_3,score_conv_4,score_conv_5,score_conv_6))
+score_conv = list(itertools.chain(score_conv_0,score_conv_1,score_conv_2,score_conv_3,score_conv_4,score_conv_5,score_conv_6))
 print(len(score_conv), len(data_conv))
 
 # dictionary of lists
