@@ -34,6 +34,11 @@ data['essay'] = df['essay']
 data[feature] = df[feature]
 data = data.dropna()
 
+y = np.round(data[feature]) # max score 9=is 60
+y = (y / 60) * 10 # we want scores to be from 0-10
+data['overall_score'] = y
+
+list_0 = []
 list_1 = []
 list_2 = []
 list_3 = []
@@ -51,6 +56,8 @@ count = 0
 
 # getting essays that are the scores in num
 for i,j in zip(range(len(df)),df["essay"]):
+    if df[feature][i] == 0: # essays scored 1
+        list_0.append(j)
     if df[feature][i] == 1: # essays scored 1
         list_1.append(j)
     if df[feature][i] == 2:
@@ -73,12 +80,13 @@ for i,j in zip(range(len(df)),df["essay"]):
         list_6.append(j)
 
 import itertools
-data = list(itertools.chain(list_1,list_2,list_3,list_4,list_5,list_6, list_7, list_8, list_9, list_10))
+data = list(itertools.chain(list_0,list_1,list_2,list_3,list_4,list_5,list_6, list_7, list_8, list_9, list_10))
 
 def gen_num(num,length):
     num_list = [num]*length
     return num_list
 
+score_0 = gen_num(0,len(list_0))
 score_1 = gen_num(1,len(list_1))
 score_2 = gen_num(2,len(list_2))
 score_3 = gen_num(3,len(list_3))
@@ -90,7 +98,7 @@ score_8 = gen_num(8,len(list_8))
 score_9 = gen_num(9,len(list_9))
 score_10 = gen_num(10,len(list_10))
 
-score = list(itertools.chain(score_1,score_2,score_3,score_4,score_5,score_6, score_7, score_8, score_9, score_10))
+score = list(itertools.chain(score_0,score_1,score_2,score_3,score_4,score_5,score_6, score_7, score_8, score_9, score_10))
 
 # dictionary of lists
 dictnary = {'essay': data, 'score': score}
