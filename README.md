@@ -1,7 +1,7 @@
 
 # Automated Essay Scoring with Lightweight Pretrained Models and Attribute-Based Evaluation Using the ASAP++ Dataset
 
-This repository provides an end-to-end framework for automated essay scoring (AES) using lightweight pretrained models and attribute-based evaluation. It is built upon the ASAP++ dataset and supports various tasks such as argumentative attribute evaluation, score prediction, content-based assessment, and more.
+This repository provides an end-to-end framework for automated essay scoring (AES) using lightweight pre-trained models and attribute-based evaluation. It is built upon the ASAP++ dataset and supports various tasks such as argumentative attribute evaluation, score prediction, content-based assessment, and more.
 
 ---
 
@@ -28,6 +28,7 @@ This repository provides an end-to-end framework for automated essay scoring (AE
 │   ├── multitask_script.py            # Multitask learning script for AES
 │   └── overall_score_train.ipynb      # Notebook for overall score training and evaluation
 ├── result/
+│   ├── essay_pipeline.py              # Essay Pipeline file
 │   ├── albert_......pth               # Example: Trained model weights (PyTorch format)
 │   ├── albert_......npy               # Example: Metadata file for model1
 │   ├── lstm_........h5                # Example: Trained model weights (Keras/TensorFlow format)
@@ -55,7 +56,7 @@ Contains implementations for various essay scoring tasks using ALBERT and other 
   - Script for content-specific attribute evaluation and modeling.
 
 - **`processed_essay_dataset.csv`**:
-  - Preprocessed dataset derived from the ASAP++ dataset.
+  - The preprocessed dataset was derived from the ASAP++ dataset.
 
 - **`albert.py`**:
   - Contains reusable utilities, such as model architectures, embedding processors, and training pipelines.
@@ -82,7 +83,7 @@ Contains LSTM-based approaches for AES tasks.
 Folder containing trained model results:
 - `.h5` and `.pth` files for storing model weights.
 - `.npy` files for saving metadata such as embedding sizes.
-
+- `essay_pipeline.py` is a script for running the complete essay pipeline, integrating with all trained model and its evaluation 
 ---
 
 ### **5. `.gitignore`**
@@ -110,7 +111,7 @@ Notebook for building and training an RNN-based classifier for predicting essay 
 3. **Train and Evaluate Models**:
    - Select the desired task and corresponding script (e.g., `code_argumentative.ipynb` for argumentative attribute modeling).
    - Configure hyperparameters and train the model.
-   - Run the evaluation function to compute performance metrics of Quadratic Weighted Kappa (QWK) for desired attribute.
+   - Run the evaluation function to compute performance metrics of Quadratic Weighted Kappa (QWK) for the desired attribute.
 
 ---
 ## Team Members
@@ -122,7 +123,7 @@ Notebook for building and training an RNN-based classifier for predicting essay 
 
 ## Acknowledgments
 
-This project utilizes several datasets, pretrained models, and research contributions. We acknowledge and cite the following works:
+This project utilizes several datasets, pre-trained models, and research contributions. We acknowledge and cite the following works:
 
 - **ASAP++ Dataset**:
   Sandeep Mathias and Pushpak Bhattacharyya. *ASAP++: Enriching the ASAP Automated Essay Grading Dataset with Essay Attribute Scores*. In Proceedings of the 11th International Conference on Language Resources and Evaluation, pages 1169-1173. Miyazaki, Japan. May 8-10, 2018. 
