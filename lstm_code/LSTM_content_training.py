@@ -12,9 +12,12 @@ import nltk                                         #Natural language processing
 
 from nltk.corpus import stopwords                   #Stopwords corpus
 from nltk.stem import PorterStemmer                 # Stemmer
+import re
 
-from sklearn.feature_extraction.text import CountVectorizer          #For Bag of words
 from sklearn.feature_extraction.text import TfidfVectorizer          #For TF-IDF
+from sklearn.model_selection import KFold
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import cohen_kappa_score
 from gensim.models import Word2Vec                                   #For Word2Vec
 
 from tensorflow.keras.layers import Embedding
@@ -24,6 +27,18 @@ from tensorflow.keras.preprocessing.text import one_hot
 from tensorflow.keras.layers import LSTM
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Dense
+
+from keras.layers import LSTM, Dense, Dropout
+from keras.models import Sequential
+import keras.backend as K
+import itertools
+
+nltk.download('stopwords')
+
+stop_words = set(stopwords.words('english'))
+len(stop_words) #finding stop words
+
+snow = nltk.stem.SnowballStemmer('english')
 
 train_data = '/home/iman.alsikaiti/workspace/AI_project/dataset/asap++_data.csv'
 df = pd.read_csv(train_data)
@@ -65,7 +80,6 @@ for i,j in zip(range(len(df)),df["essay"]):
         list_6.append(j)
 
 
-import itertools
 data = list(itertools.chain(list_1,list_2,list_3,list_4,list_5,list_6))
 
 def gen_num(num,length):
@@ -78,26 +92,11 @@ score_3 = gen_num(3,len(list_3))
 score_4 = gen_num(4,len(list_4))
 score_5 = gen_num(5,len(list_5))
 score_6 = gen_num(6,len(list_6))
-# score_7 = gen_num(7,len(list_7))
-# score_8 = gen_num(8,len(list_8))
-# score_9 = gen_num(9,len(list_9))
-# score_10 = gen_num(10,len(list_10))
 
 score = list(itertools.chain(score_1,score_2,score_3,score_4,score_5,score_6))
 
-# dictionary of lists
 dictnary = {'essay': data, 'score': score}
 df = pd.DataFrame(dictnary)
-
-nltk.download('stopwords')
-
-stop_words = set(stopwords.words('english'))
-len(stop_words) #finding stop words
-
-import re
-from nltk.corpus import stopwords
-from nltk.stem.porter import PorterStemmer
-snow = nltk.stem.SnowballStemmer('english')
 
 corpus = []
 for i in range(0, len(df)):
@@ -114,12 +113,6 @@ onehot_repr=[one_hot(words,voc_size)for words in corpus]
 
 sent_length=400
 embedded_docs=pad_sequences(onehot_repr,padding='pre',maxlen=sent_length)
-
-import numpy as np
-import nltk
-import re
-from nltk.corpus import stopwords
-from gensim.models import Word2Vec
 
 def essay_to_wordlist(essay_v, remove_stopwords):
     """Remove the tagged labels and word tokenize the sentence."""
@@ -168,15 +161,7 @@ def getAvgFeatureVecs(essays, model, num_features):
         essayFeatureVecs[counter] = makeFeatureVec(essay, model, num_features)
         counter = counter + 1
     return essayFeatureVecs
-
-import nltk
-
-nltk.download('stopwords')
-
-from keras.layers import LSTM, Dense, Dropout
-from keras.models import Sequential
-import keras.backend as K
-
+    
 def get_model():
     """Define the model."""
     model = Sequential()
@@ -192,10 +177,6 @@ def get_model():
 
 X=df
 y = X['score']
-
-from sklearn.model_selection import KFold
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import cohen_kappa_score
 
 cv = KFold(n_splits = 5, shuffle = True)
 results = []
@@ -269,11 +250,3 @@ for traincv, testcv in cv.split(X):
 
 
 print("Average Kappa score after a 5-fold cross validation: ",np.around(np.array(results).mean(),decimals=4))
-
-demo = ["Dear@CAPS1 @CAPS2, I believe that using computers will benefit us in many ways like talking and becoming friends will others through websites like facebook and mysace. Using computers can help us find coordibates, locations, and able ourselfs to millions of information. Also computers will benefit us by helping with jobs as in planning a house plan and typing a @NUM1 page report for one of our jobs in less than writing it. Now lets go into the wonder world of technology. Using a computer will help us in life by talking or making friends on line. Many people have myspace, facebooks, aim, these all benefit us by having conversations with one another. Many people believe computers are bad but how can you make friends if you can never talk to them? I am very fortunate for having a computer that can help with not only school work but my social life and how I make friends. Computers help us with finding our locations, coordibates and millions of information online. If we didn't go on the internet a lot we wouldn't know how to go onto websites that @MONTH1 help us with locations and coordinates like @LOCATION1. Would you rather use a computer or be in @LOCATION3. When your supposed to be vacationing in @LOCATION2. Million of information is found on the internet. You can as almost every question and a computer will have it. Would you rather easily draw up a house plan on the computers or take @NUM1 hours doing one by hand with ugly erazer marks all over it, you are garrenteed that to find a job with a drawing like that. Also when appling for a job many workers must write very long papers like a @NUM3 word essay on why this job fits you the most, and many people I know don't like writing @NUM3 words non-stopp for hours when it could take them I hav an a computer. That is why computers we needed a lot now adays. I hope this essay has impacted your descion on computers because they are great machines to work with. The other day I showed my mom how to use a computer and she said it was the greatest invention sense sliced bread! Now go out and buy a computer to help you chat online with friends, find locations and millions of information on one click of the button and help your self with getting a job with neat, prepared, printed work that your boss will love."]
-demo_df = pd.DataFrame(demo,columns=['essay'])
-demo_df.head()
-
-type(demo_df['essay'])
-
-content = "Dear@CAPS1 @CAPS2, I believe that using computers will benefit us in many ways like talking and becoming friends will others through websites like facebook and mysace. Using computers can help us find coordibates, locations, and able ourselfs to millions of information. Also computers will benefit us by helping with jobs as in planning a house plan and typing a @NUM1 page report for one of our jobs in less than writing it. Now lets go into the wonder world of technology. Using a computer will help us in life by talking or making friends on line. Many people have myspace, facebooks, aim, these all benefit us by having conversations with one another. Many people believe computers are bad but how can you make friends if you can never talk to them? I am very fortunate for having a computer that can help with not only school work but my social life and how I make friends. Computers help us with finding our locations, coordibates and millions of information online. If we didn't go on the internet a lot we wouldn't know how to go onto websites that @MONTH1 help us with locations and coordinates like @LOCATION1. Would you rather use a computer or be in @LOCATION3. When your supposed to be vacationing in @LOCATION2. Million of information is found on the internet. You can as almost every question and a computer will have it. Would you rather easily draw up a house plan on the computers or take @NUM1 hours doing one by hand with ugly erazer marks all over it, you are garrenteed that to find a job with a drawing like that. Also when appling for a job many workers must write very long papers like a @NUM3 word essay on why this job fits you the most, and many people I know don't like writing @NUM3 words non-stopp for hours when it could take them I hav an a computer. That is why computers we needed a lot now adays. I hope this essay has impacted your descion on computers because they are great machines to work with. The other day I showed my mom how to use a computer and she said it was the greatest invention sense sliced bread! Now go out and buy a computer to help you chat online with friends, find locations and millions of information on one click of the button and help your self with getting a job with neat, prepared, printed work that your boss will love."
